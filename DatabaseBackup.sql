@@ -64,6 +64,8 @@ ALTER PROCEDURE [dbo].[DatabaseBackup]
 @ObjectLevelRecoveryMap nvarchar(max) = 'N',
 @DatabaseOrder nvarchar(max) = NULL,
 @DatabasesInParallel nvarchar(max) = 'N',
+@RetainDays int = NULL,  -- SQL Server and Litespeed only.
+@ExpireDate date = NULL,  -- SQL Server and Litespeed only.
 @LogToTable nvarchar(max) = 'N',
 @Execute nvarchar(max) = 'Y'
 
@@ -333,6 +335,8 @@ BEGIN
   SET @Parameters = @Parameters + ', @ObjectLevelRecoveryMap = ' + ISNULL('''' + REPLACE(@ObjectLevelRecoveryMap,'''','''''') + '''','NULL')
   SET @Parameters = @Parameters + ', @DatabaseOrder = ' + ISNULL('''' + REPLACE(@DatabaseOrder,'''','''''') + '''','NULL')
   SET @Parameters = @Parameters + ', @DatabasesInParallel = ' + ISNULL('''' + REPLACE(@DatabasesInParallel,'''','''''') + '''','NULL')
+  SET @Parameters = @Parameters + ', @RetainDays = ' + ISNULL('''' + REPLACE(@RetainDays,'''','''''') + '''','NULL')
+  SET @Parameters = @Parameters + ', @ExpireDate = ' + ISNULL('''' + REPLACE(@ExpireDate,'''','''''') + '''','NULL')
   SET @Parameters = @Parameters + ', @LogToTable = ' + ISNULL('''' + REPLACE(@LogToTable,'''','''''') + '''','NULL')
   SET @Parameters = @Parameters + ', @Execute = ' + ISNULL('''' + REPLACE(@Execute,'''','''''') + '''','NULL')
 
@@ -2875,6 +2879,13 @@ BEGIN
           IF @Encrypt = 'Y' AND @ServerAsymmetricKey IS NOT NULL SET @CurrentCommand03 = @CurrentCommand03 + 'SERVER ASYMMETRIC KEY = ' + QUOTENAME(@ServerAsymmetricKey)
           IF @Encrypt = 'Y' SET @CurrentCommand03 = @CurrentCommand03 + ')'
           IF @URL IS NOT NULL AND @Credential IS NOT NULL SET @CurrentCommand03 = @CurrentCommand03 + ', CREDENTIAL = N''' + REPLACE(@Credential,'''','''''') + ''''
+
+          -- Specifies when the backup set for this backup can be overwritten. 
+          -- If these options are both used, RETAINDAYS takes precedence over EXPIREDATE.
+          -- https://docs.microsoft.com/en-us/sql/t-sql/statements/backup-transact-sql
+          IF @RetainDays IS NOT NULL SET @CurrentCommand03 = @CurrentCommand03 + ', RETAINDAYS = ' + CAST(@RetainDays AS nvarchar)
+          IF @ExpireDate IS NOT NULL SET @CurrentCommand03 = @CurrentCommand03 + ', EXPIREDATE = ''' + CAST(@ExpireDate AS nvarchar) + ''''
+
         END
 
         IF @BackupSoftware = 'LITESPEED'
@@ -2936,6 +2947,13 @@ BEGIN
 
           IF @EncryptionKey IS NOT NULL SET @CurrentCommand03 = @CurrentCommand03 + ', @encryptionkey = N''' + REPLACE(@EncryptionKey,'''','''''') + ''''
           SET @CurrentCommand03 = @CurrentCommand03 + ' IF @ReturnCode <> 0 RAISERROR(''Error performing LiteSpeed backup.'', 16, 1)'
+
+          -- , ( @retaindays = 0..99999 | @expiration = 'date' ) ]
+          -- https://support.quest.com/fr-fr/technical-documents/litespeed-for-sql-server/8.2/installation-guide/xp_backup_database
+          IF @RetainDays IS NOT NULL SET @CurrentCommand03 = @CurrentCommand03 + ', @retaindays = ' + CAST(@RetainDays AS nvarchar)
+          IF @ExpireDate IS NOT NULL SET @CurrentCommand03 = @CurrentCommand03 + ', @expiration = ''' + CAST(@ExpireDate AS nvarchar) + ''''
+
+
         END
 
         IF @BackupSoftware = 'SQLBACKUP'
